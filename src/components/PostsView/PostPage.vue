@@ -191,43 +191,50 @@ const columns = [
     title: 'Comment ID',
     dataIndex: 'comment_id',
     key: 'comment_id',
-    sorter: (a, b) => a.comment_id.localeCompare(b.comment_id),
+    sorter: (a: CommentTableDataItem, b: CommentTableDataItem) =>
+      a.comment_id.localeCompare(b.comment_id),
   },
   {
     title: 'Author',
     dataIndex: 'name',
     key: 'name',
-    sorter: (a, b) => a.name.localeCompare(b.name),
+    sorter: (a: CommentTableDataItem, b: CommentTableDataItem) => a.name.localeCompare(b.name),
   },
   {
     title: 'Time',
     dataIndex: 'created_timestamp',
     key: 'created_timestamp',
-    sorter: (a, b) => new Date(a.created_timestamp) - new Date(b.created_timestamp),
+    sorter: (a: CommentTableDataItem, b: CommentTableDataItem) =>
+      new Date(a.created_timestamp).valueOf() - new Date(b.created_timestamp).valueOf(),
   },
   {
     title: 'Content',
     dataIndex: 'content',
     key: 'content',
-    sorter: (a, b) => a.content.localeCompare(b.content),
+    sorter: (a: CommentTableDataItem, b: CommentTableDataItem) =>
+      a.content.localeCompare(b.content),
   },
   {
     title: 'Contact Address',
     dataIndex: 'contact_address',
     key: 'contact_address',
-    sorter: (a, b) => a.contact_address.localeCompare(b.contact_address),
+    sorter: (a: CommentTableDataItem, b: CommentTableDataItem) =>
+      a.contact_address.localeCompare(b.contact_address),
   },
   {
     title: 'IP Address',
     dataIndex: 'ip_address',
     key: 'ip_address',
-    sorter: (a, b) => a.ip_address.localeCompare(b.ip_address),
+    sorter: (a: CommentTableDataItem, b: CommentTableDataItem) =>
+      a.ip_address.localeCompare(b.ip_address),
   },
   {
     title: 'Display',
     dataIndex: 'display',
     key: 'display',
-    sorter: (a, b) => a.display - b.display,
+    // comparing boolean values does not really make sense, but we can still group them by assigning numbers to the boolean values
+    sorter: (a: CommentTableDataItem, b: CommentTableDataItem) =>
+      Number(a.display) - Number(b.display),
   },
   {
     title: 'Actions',
@@ -235,20 +242,32 @@ const columns = [
   },
 ]
 
+interface CommentTableDataItem {
+  comment_id: string
+  name: string
+  created_timestamp: string
+  content: string
+  contact_address: string
+  ip_address: string
+  display: boolean
+}
+
 const comments_data_source = computed(() => {
   if (current_post.value) {
     return current_post.value.comments.map((comment) => {
-      return {
-        comment_id: lablogDataStore.lablogDataState.comments[comment].comment_id,
-        name: lablogDataStore.lablogDataState.comments[comment].name,
-        created_timestamp: dayjs(
-          lablogDataStore.lablogDataState.comments[comment].created_timestamp * 1000,
-        ).format('YYYY-MM-DD HH:mm:ss'),
-        content: lablogDataStore.lablogDataState.comments[comment].content,
-        contact_address: lablogDataStore.lablogDataState.comments[comment].contact_address,
-        ip_address: lablogDataStore.lablogDataState.comments[comment].ip_address,
-        display: lablogDataStore.lablogDataState.comments[comment].display,
+      const comment_data = lablogDataStore.lablogDataState.comments[comment]
+      const data_item: CommentTableDataItem = {
+        comment_id: comment_data.comment_id,
+        name: comment_data.name,
+        created_timestamp: dayjs(comment_data.created_timestamp * 1000).format(
+          'YYYY-MM-DD HH:mm:ss',
+        ),
+        content: comment_data.content,
+        contact_address: comment_data.contact_address,
+        ip_address: comment_data.ip_address,
+        display: comment_data.display,
       }
+      return data_item
     })
   } else {
     return []
@@ -257,15 +276,16 @@ const comments_data_source = computed(() => {
 
 const editingKey = ref<string | null>(null)
 const editingField = ref<string | null>(null)
-const editValue = ref<string>('')
+const editValue = ref<string | Dayjs | boolean>('')
 
-const startEdit = (record, key) => {
+const startEdit = (record: CommentTableDataItem, key: string) => {
   editingKey.value = record.comment_id
   editingField.value = key
-  editValue.value = key === 'created_timestamp' ? dayjs(record[key]) : record[key]
+  editValue.value =
+    key === 'created_timestamp' ? dayjs(record[key]) : record[key as keyof CommentTableDataItem]
 }
 
-const onToggleCommentDisplay = async (record, key) => {
+const onToggleCommentDisplay = async (record: CommentTableDataItem, key: string) => {
   // Implement the logic to toggle the display of the comment
   console.log(`Toggle ${key} for record`, record)
   await callRESTfulAPI(
@@ -287,10 +307,15 @@ const onToggleCommentDisplay = async (record, key) => {
   await lablogDataStore.fetchLablogData()
 }
 
-const saveEdit = async (record, key) => {
+const saveEdit = async (record: CommentTableDataItem, key: string) => {
   // Implement the logic to save the edited field
   console.log(`Save ${key} for record`, record, 'with value', editValue.value)
-  const value = key === 'created_timestamp' ? editValue.value.unix() : editValue.value
+  const value: string | number | boolean =
+    key === 'created_timestamp'
+      ? (editValue.value as Dayjs).unix()
+      : key === 'display'
+        ? record.display
+        : (editValue.value as string)
   await callRESTfulAPI(
     `comments`,
     'POST',
@@ -318,7 +343,7 @@ const cancelEdit = () => {
   editingField.value = null
 }
 
-const deleteComment = async (comment_id) => {
+const deleteComment = async (comment_id: string) => {
   console.log(`Deleting comment ${comment_id}`)
   await callRESTfulAPI(`comments/${comment_id}`, 'DELETE').then((response) => {
     if (response?.result == 'success') {
